@@ -100,6 +100,7 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /**< Detects stack overflow. */
+    int64_t wake_time;                  /**< The time when the thread should wake up. */
   };
 
 /** If false (default), use round-robin scheduler.
