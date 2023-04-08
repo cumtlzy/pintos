@@ -34,7 +34,7 @@ static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
 /* Helper function for sorting the sleep list in ascending order of wake_time. */
-static bool less_wake_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+static bool compare_wake_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 
 /** Sets up the timer to interrupt TIMER_FREQ times per second,
@@ -102,7 +102,7 @@ timer_sleep (int64_t ticks)
   ASSERT (intr_get_level () == INTR_ON);
 
   thread_current ()->wake_time = start + ticks;
-  list_insert_ordered (&sleep_list, &thread_current ()->elem, less_wake_time, NULL);
+  list_insert_ordered (&sleep_list, &thread_current ()->elem, &compare_wake_time, NULL);
 
   enum intr_level old_level = intr_disable ();
   thread_block ();
@@ -182,7 +182,7 @@ timer_print_stats (void)
 
 /* Returns true if thread A has a wake-up time less than thread B. */
 bool
-less_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+compare_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
   return list_entry (a, struct thread, elem)->wake_time <
          list_entry (b, struct thread, elem)->wake_time;

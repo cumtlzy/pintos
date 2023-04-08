@@ -23,6 +23,8 @@ typedef int tid_t;
 #define PRI_MIN 0                       /**< Lowest priority. */
 #define PRI_DEFAULT 31                  /**< Default priority. */
 #define PRI_MAX 63                      /**< Highest priority. */
+#define PRI_DONATE_MAX_DEPTH 8          /**< Highest denote depth. */
+
 
 /** A kernel thread or user process.
 
@@ -101,6 +103,9 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /**< Detects stack overflow. */
     int64_t wake_time;                  /**< The time when the thread should wake up. */
+    int base_priority;                  /**< The original priority. */
+    struct list holding_locks;          /**< Locks that the thread is holding. */
+    struct lock *waiting_lock;          /**< The lock that the thread is waiting for. */
   };
 
 /** If false (default), use round-robin scheduler.
