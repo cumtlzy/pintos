@@ -37,6 +37,9 @@ static struct thread *initial_thread;
 /** Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+/* True if the scheduler has started running. */
+static bool schedule_started;
+
 /** Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -107,6 +110,8 @@ thread_init (void)
 void
 thread_start (void) 
 {
+  /* Initialize schedule_started. */
+  schedule_started = true;
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
@@ -306,6 +311,9 @@ thread_exit (void)
 void
 thread_yield (void) 
 {
+  /* Don't yield if the scheduler hasn't started yet. */
+  if (!schedule_started)
+    return;
   struct thread *cur = thread_current ();
   enum intr_level old_level;
   
