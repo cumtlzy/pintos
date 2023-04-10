@@ -28,20 +28,28 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy1, *fn_copy2;
   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
+  /* File_name is file_name and parameter. 
+     Make two copies of FILE_NAME(one for file_name and one for start_process).
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  fn_copy1 = palloc_get_page (0);
+  fn_copy2 = palloc_get_page (0);
+  if (fn_copy1 == NULL || fn_copy2 == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy1, file_name, PGSIZE);
+  strlcpy (fn_copy2, file_name, PGSIZE);
+
+  char *save_ptr;
+  char *fn = strtok_r(fn_copy1, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (fn, PRI_DEFAULT, start_process, fn_copy2);
+  if (tid == TID_ERROR) {
+    palloc_free_page (fn_copy1); 
+    palloc_free_page (fn_copy2); 
+  }
   return tid;
 }
 
@@ -51,6 +59,13 @@ static void
 start_process (void *file_name_)
 {
   char *file_name = file_name_;
+  char *fn_copy;
+  fn_copy = palloc_get_page (0);
+  strlcpy (fn_copy, file_name, PGSIZE);
+
+  char *token, *save_ptr;
+  char *fn = strtok_r(file_name, " ", &save_ptr);
+
   struct intr_frame if_;
   bool success;
 
@@ -59,12 +74,59 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (fn, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+  
+  /** load success. */
+  int argc = 0;
+  void *argv[50];
+
+  /** Setp 1: set the stack pointer at the beginnign of user virtual address sapce, 
+   * which is 0xc0000000(3GB) in Pintos
+  */
+  if_.esp = PHYS_BASE;
+
+  /** Setp 2: parse the arguments, place them at the top of stack and record their address. */
+  for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+    printf("TOKEN %s LEN %zu\n", token, strlen(token));
+    size_t arg_len = strlen(token) + 1; //'\0' ending is needed.
+    if_.esp -= arg_len;
+    memcpy(if_.esp, token, arg_len);
+    argv[argc++] = if_.esp;
+  }
+
+  /** Step 3&4: round the pointer down to a multiple of 4 first, then push the address of 
+   * each string plus a null pointer sentinel on the stack, in right-to-left order.
+  */
+  printf("BEFORE ROUND %p\n", if_.esp);
+  uintptr_t tmp = (uintptr_t)if_.esp; // pointer can't do modulo directly
+  if (tmp % 4 != 0)
+    tmp -= tmp % 4;
+  if_.esp = (void *)tmp;
+  printf("AFTER ROUND %p\n", if_.esp);
+
+  size_t ptr_size = sizeof(void *); // size of a pointer
+  if_.esp -= ptr_size;
+  memset(if_.esp, 0, ptr_size); // null pointer sentinel
+  for (int i = argc - 1; i >= 0; i--) {
+    if_.esp -= ptr_size;
+    memcpy(if_.esp, &argv[i], ptr_size);
+  }
+
+  /** Step 5: push argv and argc. */
+  if_.esp -= ptr_size;
+  *(uintptr_t *)if_.esp = ((uintptr_t)if_.esp + ptr_size); // argv[0] is at where we just were
+  if_.esp -= ptr_size;
+  *(int *)if_.esp = argc;
+
+  /** Step 6: push a fake "return address"(0). */
+  if_.esp -= ptr_size;
+  memset(if_.esp, 0, ptr_size);
+  printf("STACK SET. ESP: %p\n", if_.esp);
+  hex_dump((uintptr_t)if_.esp, if_.esp, 100, true); // 打印的byte数不用特别准确，随便填大一些
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
