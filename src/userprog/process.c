@@ -91,7 +91,7 @@ start_process (void *file_name_)
 
   /** Setp 2: parse the arguments, place them at the top of stack and record their address. */
   for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
-    printf("TOKEN %s LEN %zu\n", token, strlen(token));
+    // printf("TOKEN %s LEN %zu\n", token, strlen(token));
     size_t arg_len = strlen(token) + 1; //'\0' ending is needed.
     if_.esp -= arg_len;
     memcpy(if_.esp, token, arg_len);
@@ -101,12 +101,12 @@ start_process (void *file_name_)
   /** Step 3&4: round the pointer down to a multiple of 4 first, then push the address of 
    * each string plus a null pointer sentinel on the stack, in right-to-left order.
   */
-  printf("BEFORE ROUND %p\n", if_.esp);
+  // printf("BEFORE ROUND %p\n", if_.esp);
   uintptr_t tmp = (uintptr_t)if_.esp; // pointer can't do modulo directly
   if (tmp % 4 != 0)
     tmp -= tmp % 4;
   if_.esp = (void *)tmp;
-  printf("AFTER ROUND %p\n", if_.esp);
+  // printf("AFTER ROUND %p\n", if_.esp);
 
   size_t ptr_size = sizeof(void *); // size of a pointer
   if_.esp -= ptr_size;
@@ -125,8 +125,8 @@ start_process (void *file_name_)
   /** Step 6: push a fake "return address"(0). */
   if_.esp -= ptr_size;
   memset(if_.esp, 0, ptr_size);
-  printf("STACK SET. ESP: %p\n", if_.esp);
-  hex_dump((uintptr_t)if_.esp, if_.esp, 100, true); // 打印的byte数不用特别准确，随便填大一些
+  // printf("STACK SET. ESP: %p\n", if_.esp);
+  // hex_dump((uintptr_t)if_.esp, if_.esp, 100, true);  打印的byte数不用特别准确，随便填大一些
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
